@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Docker 微服務系統儀表板</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-900 text-white min-h-screen p-8">
+  <div class="max-w-4xl mx-auto space-y-8">
+    
+    <!-- 頁首標題 -->
+    <header class="border-b border-slate-700 pb-4">
+      <h1 class="text-3xl font-bold text-cyan-400">🐋 Docker 微服務系統儀表板</h1>
+      <p class="text-slate-400 mt-1">展示 Nginx + Node.js + PostgreSQL 容器化架構運作狀態</p>
+    </header>
+
+    <!-- 服務運作狀態區塊 -->
+    <section class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div class="bg-slate-800 p-5 rounded-xl border border-slate-700">
+        <div class="text-slate-400 text-sm">Web Server & Reverse Proxy</div>
+        <div class="text-xl font-semibold text-emerald-400 mt-1">🟢 Nginx</div>
+        <div class="text-xs text-slate-500 mt-2">Port: 80</div>
+      </div>
+
+      <div class="bg-slate-800 p-5 rounded-xl border border-slate-700">
+        <div class="text-slate-400 text-sm">Backend API Service</div>
+        <div class="text-xl font-semibold text-emerald-400 mt-1" id="backend-status">⚡ Node.js</div>
+        <div class="text-xs text-slate-500 mt-2">Internal Port: 3000</div>
+      </div>
+
+      <div class="bg-slate-800 p-5 rounded-xl border border-slate-700">
+        <div class="text-slate-400 text-sm">Database System</div>
+        <div class="text-xl font-semibold text-emerald-400 mt-1" id="db-status">🐘 PostgreSQL</div>
+        <div class="text-xs text-slate-500 mt-2">Internal Port: 5432</div>
+      </div>
+    </section>
+
+    <!-- 資料庫互動測試區塊 -->
+    <section class="bg-slate-800 p-6 rounded-xl border border-slate-700 space-y-4">
+      <h2 class="text-xl font-semibold text-cyan-300">📝 PostgreSQL 資料庫讀寫測試</h2>
+      
+      <div class="flex gap-2">
+        <input type="text" id="logInput" placeholder="輸入要儲存至 PostgreSQL 的訊息..." 
+               class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 focus:outline-none focus:border-cyan-500">
+        <button onclick="addLog()" class="bg-cyan-600 hover:bg-cyan-500 px-6 py-2 rounded-lg font-medium transition">寫入 DB</button>
+      </div>
+
+      <div>
+        <h3 class="text-sm font-medium text-slate-400 mb-2">最近 10 筆 Log 紀錄：</h3>
+        <ul id="logList" class="space-y-2 text-sm">
+          <li class="text-slate-500">載入中...</li>
+        </ul>
+      </div>
+    </section>
+
+  </div>
+
+  <script>
+    // 檢查系統狀態
+    async function checkStatus() {
+      try {
+        const res = await fetch('/api/system-status');
+        const data = await res.json();
+        
+        if (data.status === 'ok') {
+          document.getElementById('backend-status').innerText = '🟢 Node.js (Active)';
+          document.getElementById('db-status').innerText = '🟢 PostgreSQL (Connected)';
+        }
+      } catch (err) {
+        document.getElementById('backend-status').innerText = '🔴 Node.js (Error)';
+        document.getElementById('db-status').innerText = '🔴 PostgreSQL (Error)';
+      }
+    }
+
+    // 取得資料庫紀錄
+    async function fetchLogs() {
+      try {
+        const res = await fetch('/api/logs');
+        const logs = await res.json();
+        const listEl = document.getElementById('logList');
+        
+        if (logs.length === 0) {
+          listEl.innerHTML = '<li class="text-slate-500">目前沒有資料，請新增測試訊息！</li>';
+          return;
+        }
+
+        listEl.innerHTML = logs.map(log => `
+          <li class="bg-slate-900 p-3 rounded-lg border border-slate-800 flex justify-between items-center">
+            <span>${escapeHtml(log.message)}</span>
+            <span class="text-xs text-slate-500">${new Date(log.created_at).toLocaleString()}</span>
+          </li>
+        `).join('');
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    // 新增紀錄至資料庫
+    async function addLog() {
+      const input = document.getElementById('logInput');
+      const message = input.value.trim();
+      if (!message) return;
+
+      await fetch('/api/logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message })
+      });
+
+      input.value = '';
+      fetchLogs();
+    }
+
+    function escapeHtml(text) {
+      return text.replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[m]);
+    }
+
+    // 初始化執行
+    checkStatus();
+    fetchLogs();
+    setInterval(checkStatus, 5000);
+  </script>
+</body>
+</html>
